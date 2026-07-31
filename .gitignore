@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Virtual environment
+.venv/
+venv/
+
+# Packaging / tooling caches
+*.egg-info/
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+
+# Editor
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+
+# User-specific runtime config (regenerated on first run)
+car/settings.json
+
+# Vendored LEGO Education docs (see README for the online source)
+docs/
+
+# Vendored external example repos
+examples/

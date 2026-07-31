@@ -1,0 +1,4 @@
+ruff>=0.16.1
+pymarkdownlnt>=0.9.39
+pytest>=8.3.0
+
