@@ -16,9 +16,9 @@ from car.robot.audio import AudioPlayer
 from car.robot.boundary import BoundaryGuard
 from car.robot.colorsensor import CarColorSensor
 from car.robot.drive import (
+    DriveDirection,
     DriveToggle,
-    LineStepper,
-    MoveCommand,
+    LineFollower,
     TurnCommand,
     arcade_drive,
     direction_to_forward,
@@ -139,14 +139,12 @@ def _run_drive_loop(
     """
     line_follow_active = False
     track_tracker = TrackSegmentTracker(settings.line_follow_segment_confirm_ticks)
-    line_stepper = LineStepper(
-        settings.line_follow_look_degrees,
+    line_follower = LineFollower(
+        settings.line_follow_small_scan_degrees,
+        settings.line_follow_scan_degrees,
         settings.line_follow_look_straight_ticks,
-        settings.line_follow_recovery_look_degrees,
-        settings.line_follow_step_degrees,
     )
-    active_command: TurnCommand | MoveCommand | None = None  # last dispatched, still in-flight command -- display only
-    boost_pulse_remaining = 0
+    active_command: TurnCommand | None = None  # last dispatched, still in-flight command -- display only
     boost_sound_delay_remaining = 0
     drive_toggle = DriveToggle()
     goal_count = 0
@@ -156,6 +154,7 @@ def _run_drive_loop(
     was_line_boosting = False
     was_searching = False
     track_acquired = False
+    lap_baseline_set = False  # the very first confirmed segment never counts as a lap, even if it's white
     try:
         with Dashboard() as dashboard:
             _set_light(motors, colorsensor, le.LEGO_COLOR_GREEN)  # starts in free-drive mode
@@ -203,15 +202,15 @@ def _run_drive_loop(
                     # start each activation fresh, ignoring prior segment/boost/search history, and
                     # stop driving on the switch so a mode change never carries over a driving intent
                     track_tracker = TrackSegmentTracker(settings.line_follow_segment_confirm_ticks)
-                    line_stepper.reset()
+                    line_follower.reset()
                     active_command = None
-                    boost_pulse_remaining = 0
                     boost_sound_delay_remaining = 0
                     drive_toggle.stop()
                     was_boosting = False
                     was_line_boosting = False
                     was_searching = False
                     track_acquired = False
+                    lap_baseline_set = False
                     voice.play_instruction("linefollower" if line_follow_active else "freeride")
                     _set_light(motors, colorsensor, le.LEGO_COLOR_BLUE if line_follow_active else le.LEGO_COLOR_GREEN)
 
@@ -220,8 +219,6 @@ def _run_drive_loop(
                 forward_pressed = gamepad.button_just_pressed(settings.gamepad.button_a)
 
                 if line_follow_active:
-                    # backward driving isn't offered by the A-button toggle itself, only the forward press is forwarded
-                    forward = direction_to_forward(drive_toggle.update(forward_pressed, False))
                     detected_segment = classify_track_segment(
                         color,
                         settings.line_follow_normal_color,
@@ -230,20 +227,35 @@ def _run_drive_loop(
                     )
                     on_track = detected_segment is not TrackSegment.NONE
 
+                    if (
+                        forward_pressed
+                        and drive_toggle.direction is DriveDirection.NONE
+                        and detected_segment not in (TrackSegment.NORMAL, TrackSegment.GOAL)
+                    ):
+                        # can't start driving without a valid blue/white line already under the
+                        # sensor -- green, the boundary, or no line at all can't be a starting spot
+                        voice.play_voice("losttrack")
+                        forward_pressed = False  # swallow the press -- don't let the toggle react to it
+
+                    # backward driving isn't offered by the A-button toggle itself, only the forward press is forwarded
+                    forward = direction_to_forward(drive_toggle.update(forward_pressed, False))
+
                     if forward:
-                        # the stepper decides each turn/move as an exact, IMU-verified degree
-                        # command -- forward here is just the gate; motor_done reports whether the
+                        # the follower decides each turn as an exact, IMU-verified degree command
+                        # -- forward here is just the gate; motor_done reports whether the
                         # previously dispatched command (if any) has finished on the hub yet
                         motor_done = motors.is_done()
-                        command, gave_up = line_stepper.update(detected_segment, motor_done)
-                        if command is not None:
+                        drive_straight, command, gave_up = line_follower.update(detected_segment, motor_done)
+                        if drive_straight:
+                            active_command = None
+                        elif command is not None:
                             active_command = command
                         elif motor_done:
                             active_command = None
                     else:
-                        line_stepper.reset()
+                        line_follower.reset()
                         motors.stop()
-                        command, gave_up = None, False
+                        drive_straight, command, gave_up = False, None, False
                         active_command = None
 
                     if gave_up:
@@ -252,12 +264,13 @@ def _run_drive_loop(
                         drive_toggle.stop()
                         motors.stop()
                         track_acquired = False
+                        lap_baseline_set = False
 
                     if on_track and not track_acquired:
                         voice.play_voice("starttrack")
                         track_acquired = True
 
-                    searching = bool(forward) and line_stepper.is_searching
+                    searching = bool(forward) and line_follower.is_searching
                     was_searching = _set_light_on_change(
                         motors,
                         colorsensor,
@@ -268,79 +281,49 @@ def _run_drive_loop(
                         le.LIGHT_PATTERN_SHORT_BLINK,
                     )
 
-                    entered_new_segment = track_tracker.update(
-                        color,
-                        settings.line_follow_normal_color,
-                        settings.line_follow_boost_color,
-                        settings.line_follow_goal_color,
-                    )
+                    entered_new_segment = track_tracker.update(detected_segment)
                     if entered_new_segment:
-                        if track_tracker.current is TrackSegment.BOOST:
-                            # boost only on the tick the car first enters green, not for the whole
-                            # segment — a sustained boost risks overshooting straight off the track
-                            boost_pulse_remaining = settings.line_follow_boost_pulse_ticks
-                            # delayed so the sound lands after the motor's own ramp has started speeding up
-                            boost_sound_delay_remaining = settings.line_follow_boost_sound_delay_ticks
-                        else:
-                            _set_light(motors, colorsensor, le.LEGO_COLOR_BLUE)
-                            boost_pulse_remaining = 0
-                            boost_sound_delay_remaining = 0
-                            was_line_boosting = False
-                            if track_tracker.current is TrackSegment.GOAL:
-                                goal_count += 1
-                                sound.play_honk()
+                        # the very first segment ever confirmed this activation is just "where it
+                        # started" -- only a later, genuine transition into white counts as a lap
+                        is_first_segment = not lap_baseline_set
+                        lap_baseline_set = True
+                        if track_tracker.current is TrackSegment.GOAL and not is_first_segment:
+                            goal_count += 1
+                            sound.play_honk()
+                        # delayed so the sound lands after the motor's own ramp has started speeding up
+                        boost_sound_delay_remaining = (
+                            settings.line_follow_boost_sound_delay_ticks if track_tracker.current is TrackSegment.BOOST else 0
+                        )
 
                     if boost_sound_delay_remaining > 0:
                         boost_sound_delay_remaining -= 1
                         if boost_sound_delay_remaining == 0:
                             sound.play_boost()
 
-                    boosting = boost_pulse_remaining > 0
+                    # boost is continuous for as long as the (debounced) segment is green, not a
+                    # one-time pulse -- it's the same continuous scan-and-drive cycle as blue, faster
+                    boosting = track_tracker.current is TrackSegment.BOOST
                     was_line_boosting = _set_light_on_change(
                         motors, colorsensor, boosting, was_line_boosting, le.LEGO_COLOR_ORANGE, le.LEGO_COLOR_BLUE
                     )
+                    speed_percent = settings.line_follow_boost_speed_percent if boosting else settings.line_follow_speed_percent
 
-                    if boosting:
-                        speed_percent = settings.line_follow_boost_speed_percent
-                        boost_pulse_remaining -= 1
-                    elif searching:
-                        speed_percent = settings.line_follow_search_speed_percent
-                    else:
-                        speed_percent = settings.line_follow_speed_percent
-
-                    # dispatch: BOOST is a guaranteed-straight segment, driven continuously rather
-                    # than via discrete for-degrees commands (see LineStepper's BOOST bypass); a
-                    # turn/move command is only dispatched on the tick it's newly issued -- while
-                    # one is in flight (motor_done was False) there's nothing new to send, since
-                    # calling motors.drive()/turn_for_degrees()/move_for_degrees() again would cancel it
-                    if forward and detected_segment is TrackSegment.BOOST:
+                    # a turn command is only dispatched on the tick it's newly issued -- issuing
+                    # another command while one is in flight would cancel it on the hub (the one
+                    # exception: drive_straight deliberately cancels an in-flight scan to resume)
+                    if drive_straight:
                         motors.drive(speed_percent, speed_percent)
                     elif isinstance(command, TurnCommand):
-                        turn_speed_percent = (
-                            settings.line_follow_scan_turn_speed_percent
-                            if command.is_scan
-                            else settings.line_follow_turn_speed_percent
-                        )
-                        motors.turn_for_degrees(command.degrees, turn_speed_percent)
-                    elif isinstance(command, MoveCommand):
-                        motors.move_for_degrees(command.degrees, speed_percent)
+                        motors.turn_for_degrees(command.degrees, settings.line_follow_turn_speed_percent)
 
                     # dashboard speed display only -- reflects the currently active maneuver (which
                     # may have been dispatched on an earlier tick and still be in flight)
-                    if forward and detected_segment is TrackSegment.BOOST:
+                    if drive_straight:
                         speed_left = speed_right = speed_percent
                     elif isinstance(active_command, TurnCommand):
-                        active_turn_speed_percent = (
-                            settings.line_follow_scan_turn_speed_percent
-                            if active_command.is_scan
-                            else settings.line_follow_turn_speed_percent
-                        )
                         turn_sign = 1.0 if active_command.degrees >= 0 else -1.0
-                        speed_left = turn_sign * active_turn_speed_percent
-                        speed_right = -turn_sign * active_turn_speed_percent
-                    elif isinstance(active_command, MoveCommand):
-                        move_sign = 1.0 if active_command.degrees >= 0 else -1.0
-                        speed_left = speed_right = move_sign * speed_percent
+                        speed_left = turn_sign * settings.line_follow_turn_speed_percent
+                        speed_right = -turn_sign * settings.line_follow_turn_speed_percent
                     else:
                         speed_left = speed_right = 0.0
 

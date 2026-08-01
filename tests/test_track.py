@@ -20,20 +20,20 @@ def test_tracker_starts_on_none():
 
 def test_tracker_requires_confirm_ticks_before_switching():
     tracker = TrackSegmentTracker(confirm_ticks=2)
-    assert tracker.update(NORMAL, NORMAL, BOOST, GOAL) is False
+    assert tracker.update(TrackSegment.NORMAL) is False
     assert tracker.current is TrackSegment.NONE
-    assert tracker.update(NORMAL, NORMAL, BOOST, GOAL) is True
+    assert tracker.update(TrackSegment.NORMAL) is True
     assert tracker.current is TrackSegment.NORMAL
 
 
 def test_tracker_ignores_a_single_stray_misread():
     tracker = TrackSegmentTracker(confirm_ticks=2)
-    tracker.update(NORMAL, NORMAL, BOOST, GOAL)
-    tracker.update(NORMAL, NORMAL, BOOST, GOAL)
+    tracker.update(TrackSegment.NORMAL)
+    tracker.update(TrackSegment.NORMAL)
     assert tracker.current is TrackSegment.NORMAL
 
-    tracker.update(BOOST, NORMAL, BOOST, GOAL)  # one stray tick reading the wrong color
+    tracker.update(TrackSegment.BOOST)  # one stray tick reading the wrong segment
     assert tracker.current is TrackSegment.NORMAL
 
-    tracker.update(NORMAL, NORMAL, BOOST, GOAL)  # back to normal before the stray reading could be confirmed
+    tracker.update(TrackSegment.NORMAL)  # back to normal before the stray reading could be confirmed
     assert tracker.current is TrackSegment.NORMAL

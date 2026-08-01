@@ -35,15 +35,8 @@ class CarMotors:
         direction = le.MOVEMENT_TURN_DIRECTION_RIGHT if degrees >= 0 else le.MOVEMENT_TURN_DIRECTION_LEFT
         self._motor.movement_turn_for_degrees(abs(degrees), direction=direction, speed=speed_percent, blocking=False)
 
-    def move_for_degrees(self, degrees: float, speed_percent: float) -> None:
-        """Drives straight for exactly degrees of wheel rotation (positive = forward, negative =
-        backward), non-blocking — poll is_done() each tick to know when it's finished.
-        """
-        direction = le.MOVEMENT_MOVE_DIRECTION_FORWARD if degrees >= 0 else le.MOVEMENT_MOVE_DIRECTION_BACKWARD
-        self._motor.movement_move_for_degrees(abs(degrees), direction=direction, speed=speed_percent, blocking=False)
-
     def is_done(self) -> bool:
-        """Whether the last turn_for_degrees()/move_for_degrees() command has finished."""
+        """Whether the last turn_for_degrees() command has finished."""
         return self._motor.done()
 
     def is_bumped(self) -> bool:

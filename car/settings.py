@@ -75,19 +75,17 @@ class Settings:
     line_follow_goal_color: int
     line_follow_speed_percent: float
     line_follow_boost_speed_percent: float
-    line_follow_boost_pulse_ticks: int
     line_follow_boost_sound_delay_ticks: int
     line_follow_segment_confirm_ticks: int
 
-    # Line-follower mode: halt-scan-align-step cycle + retrace-and-broaden recovery, driven by
-    # the Double Motor's IMU-verified movement_turn_for_degrees()/movement_move_for_degrees()
-    line_follow_look_degrees: float
+    # Line-follower mode: continuous straight driving, halting to scan (dead ahead, then a small
+    # left/right nudge, then a much wider sweep if that finds nothing) the instant the line isn't
+    # seen, giving up if even the wide sweep finds nothing — driven by the Double Motor's
+    # IMU-verified movement_turn_for_degrees()
+    line_follow_small_scan_degrees: float
+    line_follow_scan_degrees: float
     line_follow_look_straight_ticks: int
-    line_follow_recovery_look_degrees: float
     line_follow_turn_speed_percent: float
-    line_follow_scan_turn_speed_percent: float
-    line_follow_step_degrees: float
-    line_follow_search_speed_percent: float
 
     # Gamepad calibration wizard
     calibration_axis_hold_s: float
@@ -117,17 +115,13 @@ _STARTING_SETTINGS = Settings(
     line_follow_boost_color=5,  # le.LEGO_COLOR_GREEN
     line_follow_goal_color=7,  # le.LEGO_COLOR_WHITE
     line_follow_speed_percent=12,
-    line_follow_boost_speed_percent=100,
-    line_follow_boost_pulse_ticks=4,
+    line_follow_boost_speed_percent=35,
     line_follow_boost_sound_delay_ticks=2,
     line_follow_segment_confirm_ticks=2,
-    line_follow_look_degrees=18.0,  # 5% of a full 360-degree turn
+    line_follow_small_scan_degrees=15.0,  # tried first -- finds most losses, which are just a bit off-center
+    line_follow_scan_degrees=90.0,  # the wider fallback sweep if the small nudge doesn't find it
     line_follow_look_straight_ticks=2,
-    line_follow_recovery_look_degrees=36.0,  # 10% of a full 360-degree turn
-    line_follow_turn_speed_percent=30,
-    line_follow_scan_turn_speed_percent=10,  # much slower -- the sensor must catch the line mid-turn
-    line_follow_step_degrees=90.0,  # a quarter wheel rotation -- small enough for a curve or a straight alike
-    line_follow_search_speed_percent=8,
+    line_follow_turn_speed_percent=10,  # slow -- the sensor must catch the line mid-turn
     calibration_axis_hold_s=5.0,
     calibration_axis_noise_threshold=0.3,
     calibration_poll_interval_s=0.02,

@@ -9,7 +9,7 @@ line-following mode. Built on the [LEGO Education Python API](https://github.com
 
 - Free-drive: manual gamepad control with proportional turning, reverse, and boost.
 - Line-follower: autonomous track driving with a boost segment, a lap-counting finish line, and
-  a lost-line search.
+  a lost-line search that resumes the instant the line is found again.
 - Boundary safety stop: a red tape line blocks the wheels in either mode.
 - Sound and voice: honks, boost effects, and spoken driver comments (any language).
 - Status light: at-a-glance mode/state indicator on the motor and sensor.
@@ -70,12 +70,15 @@ and plays a spoken warning until the car is lifted clear.
 | Color | Meaning |
 | --- | --- |
 | Blue | Normal-speed line following |
-| Green | Brief speed boost on entry |
+| Green | Continuous speed boost for as long as it's seen |
 | White | Finish line — honks and counts a lap |
 | Red | Boundary — blocks the wheels |
 
-Steering reacts every tick: straight while a track color is seen, an increasingly sharp turn the
-instant it isn't, until the line reappears or the car gives up and stops.
+The car drives straight ahead as long as it sees blue, green, or white under the sensor. If it
+loses the line, it scans for it (widening the search if needed) and resumes automatically; if the
+line can't be found at all, it stops, honks, and waits to be repositioned by hand. A press of A
+only starts driving if blue or white is already under the sensor. The segment the car starts on
+is never counted as a lap — only a later, genuine arrival at white is.
 
 ## Status Light
 

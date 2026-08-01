@@ -41,9 +41,10 @@ class TrackSegmentTracker:
     def current(self) -> TrackSegment:
         return self._current
 
-    def update(self, color: int, normal_color: int, boost_color: int, goal_color: int) -> bool:
-        """Call once per loop tick with the freshly detected color. Returns True on a new segment's first tick."""
-        detected = classify_track_segment(color, normal_color, boost_color, goal_color)
+    def update(self, detected: TrackSegment) -> bool:
+        """Call once per loop tick with this tick's already-classified segment (classify_track_segment()).
+        Returns True on a new segment's first tick.
+        """
         if detected is TrackSegment.NONE or detected is self._current:
             self._candidate, self._candidate_streak = TrackSegment.NONE, 0
             return False

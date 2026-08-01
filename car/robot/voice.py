@@ -33,7 +33,7 @@ class VoiceLines:
     """
 
     def __init__(self, language: str, audio_player: AudioPlayer) -> None:
-        pygame.mixer.init()
+        # audio_player's own construction already initialized the mixer
         self._audio = audio_player
         language_dir = ASSETS_DIR / language
         if not language_dir.is_dir():
