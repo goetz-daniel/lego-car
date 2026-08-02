@@ -1,5 +1,6 @@
 """Pure drive math: turns gamepad input into independent left/right motor speeds. No hardware/IO here."""
 
+import random as _random
 from dataclasses import dataclass
 from enum import Enum, auto
 
@@ -157,9 +158,9 @@ class DriveDirection(Enum):
 
 class DriveToggle:
     """Press-once accelerator/reverse toggle: forward starts driving until pressed again;
-    backward switches directly from any state (and vice versa). Used by line-follower mode only —
-    free-drive uses held_to_forward() below instead, since holding the button down is expected
-    there.
+    backward switches directly from any state (and vice versa). Used by line-follower and adventure
+    modes — free-drive uses held_to_forward() below instead, since holding the button down is
+    expected there.
     """
 
     def __init__(self) -> None:
@@ -200,3 +201,145 @@ def held_to_forward(forward_held: bool, backward_held: bool) -> float:
     if backward_held:
         return -1.0
     return 0.0
+
+
+_WIGGLE_FLIP_TICKS = 8  # half-period of wiggle direction change (ticks per direction)
+_REDIRECT_CLEAR_TICKS = 8  # ticks to drive forward after U-turn before declaring lost
+_STYLE_WEIGHTS = (3, 2, 2, 1)  # straight, wiggle, curve, circle — straight most common, circle rare
+
+
+class _AdventurePhase(Enum):
+    DRIVE = auto()
+    TURNING = auto()
+    REDIRECTING = auto()
+    CLEARING = auto()  # brief forward drive after redirect to get off the red line
+
+
+class AdventureDriver:
+    """Autonomous arena wanderer: drives freely inside a red-bordered area.
+
+    Each drive segment is one of four styles — straight, wiggle (left-right oscillation),
+    curve (arc in one direction), or circle (tight full-steer arc) — never the same style twice in
+    a row. On red: pivots 180° then drives forward briefly before resuming, to avoid false-positive
+    lost detection.
+    """
+
+    def __init__(
+        self,
+        drive_ticks_min: int,
+        drive_ticks_max: int,
+        rng: _random.Random | None = None,
+    ) -> None:
+        self._drive_ticks_min = drive_ticks_min
+        self._drive_ticks_max = drive_ticks_max
+        self._rng = rng if rng is not None else _random.Random()
+        self._phase = _AdventurePhase.DRIVE
+        self._ticks_left = 0
+        self._is_boosting = False
+        self._steer = 0.0
+        self._wiggle_flip_remaining = 0
+        self._last_style = -1
+        self._start_drive()
+
+    @property
+    def is_boosting(self) -> bool:
+        return self._is_boosting
+
+    @property
+    def steer(self) -> float:
+        """Steering bias for this drive segment: -1.0 = hard left, 0.0 = straight, 1.0 = hard right."""
+        return self._steer
+
+    @property
+    def is_redirecting(self) -> bool:
+        return self._phase is _AdventurePhase.REDIRECTING
+
+    def reset(self) -> None:
+        """Resets to the same state as newly constructed — next update() drives forward."""
+        self._last_style = -1
+        self._start_drive()
+
+    def _start_drive(self) -> None:
+        self._phase = _AdventurePhase.DRIVE
+        self._wiggle_flip_remaining = 0
+        styles = [s for s in (0, 1, 2, 3) if s != self._last_style]
+        style = self._rng.choices(styles, weights=[_STYLE_WEIGHTS[s] for s in styles], k=1)[0]
+        self._last_style = style
+        if style == 0:  # straight
+            self._steer = 0.0
+            self._is_boosting = False
+            self._ticks_left = self._rng.randint(self._drive_ticks_min, self._drive_ticks_max + self._drive_ticks_min)
+        elif style == 1:  # wiggle: small left-right oscillation while going forward
+            self._steer = 0.25 * self._rng.choice((-1, 1))
+            self._is_boosting = False
+            self._wiggle_flip_remaining = _WIGGLE_FLIP_TICKS
+            self._ticks_left = self._rng.randint(self._drive_ticks_min * 2, self._drive_ticks_max + self._drive_ticks_min)
+        elif style == 2:  # curve: consistent arc in one direction
+            self._steer = self._rng.uniform(0.4, 0.7) * self._rng.choice((-1, 1))
+            self._is_boosting = False
+            self._ticks_left = self._rng.randint(self._drive_ticks_min, self._drive_ticks_max)
+        else:  # circle: tight full-steer arc at boost speed
+            self._steer = float(self._rng.choice((-1, 1)))
+            self._is_boosting = True
+            self._ticks_left = self._rng.randint(self._drive_ticks_min, self._drive_ticks_min + 10)
+
+    def _random_turn(self) -> TurnCommand:
+        degrees = self._rng.uniform(30.0, 180.0)
+        self._is_boosting = False
+        return TurnCommand(degrees * self._rng.choice((-1, 1)))
+
+    def _redirect(self) -> TurnCommand:
+        return TurnCommand(180.0 * self._rng.choice((-1, 1)))
+
+    def update(self, on_red: bool, motor_done: bool) -> tuple[bool, TurnCommand | None, bool]:
+        """Call once per tick. Returns (continuous_drive, command, lost): continuous_drive means call
+        motors.drive() this tick; command is a new TurnCommand to dispatch once; lost means the
+        post-redirect clearing drive ended while still on red — the car needs manual repositioning.
+        """
+        if self._phase is _AdventurePhase.CLEARING:
+            self._ticks_left -= 1
+            if self._ticks_left <= 0:
+                if on_red:  # drove forward after U-turn, still on red = truly outside
+                    return False, None, True
+                self._start_drive()
+            return True, None, False
+
+        if self._phase is _AdventurePhase.REDIRECTING:
+            if motor_done:
+                self._phase = _AdventurePhase.CLEARING
+                self._ticks_left = _REDIRECT_CLEAR_TICKS
+                self._steer = 0.0
+                self._is_boosting = False
+                return True, None, False
+            return False, None, False
+
+        if self._phase is _AdventurePhase.TURNING:
+            if motor_done:
+                self._start_drive()
+                return True, None, False
+            return False, None, False
+
+        # on_red only checked in DRIVE phase — never while a turn_for_degrees() is already in flight,
+        # since issuing a second command before the first resolves leaves an orphaned pending future
+        # in the LEGO library, causing done() to permanently return False and hanging the car.
+        if on_red:
+            self._phase = _AdventurePhase.REDIRECTING
+            self._is_boosting = False
+            return False, self._redirect(), False
+
+        # DRIVE phase: handle wiggle oscillation, then count down ticks
+        if self._wiggle_flip_remaining > 0:
+            self._wiggle_flip_remaining -= 1
+            if self._wiggle_flip_remaining == 0:
+                self._steer = -self._steer
+                self._wiggle_flip_remaining = _WIGGLE_FLIP_TICKS
+
+        self._ticks_left -= 1
+        if self._ticks_left <= 0:
+            if self._rng.random() < 0.5:
+                self._start_drive()
+                return True, None, False
+            self._phase = _AdventurePhase.TURNING
+            return False, self._random_turn(), False
+
+        return True, None, False

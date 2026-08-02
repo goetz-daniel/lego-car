@@ -1,4 +1,8 @@
+import random
+
 from car.robot.drive import (
+    _REDIRECT_CLEAR_TICKS,
+    AdventureDriver,
     DriveDirection,
     DriveToggle,
     LineFollower,
@@ -205,3 +209,155 @@ def test_drive_toggle_stop_forces_none():
     toggle.update(forward_pressed=True, backward_pressed=False)
     toggle.stop()
     assert toggle.direction is DriveDirection.NONE
+
+
+# ── AdventureDriver ────────────────────────────────────────────────────────────
+
+_ADV_TICKS = 5
+
+
+def _new_driver(ticks: int = _ADV_TICKS) -> AdventureDriver:
+    return AdventureDriver(ticks, ticks, rng=random.Random(42))
+
+
+def test_adventure_driver_starts_with_continuous_drive():
+    driver = _new_driver()
+    continuous, command, _ = driver.update(on_red=False, motor_done=True)
+    assert continuous is True
+    assert command is None
+    assert not driver.is_redirecting
+
+
+def test_adventure_driver_drives_forward_while_ticks_remain():
+    driver = _new_driver(ticks=20)
+    for _ in range(10):  # well within 20 ticks
+        continuous, command, _ = driver.update(on_red=False, motor_done=True)
+        assert continuous is True
+        assert command is None
+
+
+def test_adventure_driver_on_red_returns_a_turn_command():
+    driver = _new_driver()
+    continuous, command, _ = driver.update(on_red=True, motor_done=True)
+    assert continuous is False
+    assert isinstance(command, TurnCommand)
+    assert driver.is_redirecting
+
+
+def test_adventure_driver_redirect_is_exactly_180_degrees():
+    driver = _new_driver()
+    _, command, _ = driver.update(on_red=True, motor_done=True)
+    assert command is not None
+    assert abs(command.degrees) == 180.0
+
+
+def test_adventure_driver_ignores_further_red_while_redirecting():
+    driver = _new_driver()
+    driver.update(on_red=True, motor_done=True)  # start redirect
+    continuous, command, _ = driver.update(on_red=True, motor_done=False)
+    assert continuous is False
+    assert command is None  # no new command -- still waiting for the original turn
+
+
+def test_adventure_driver_waits_for_motor_done_during_redirect():
+    driver = _new_driver()
+    driver.update(on_red=True, motor_done=True)  # start redirect
+    assert driver.update(on_red=False, motor_done=False) == (False, None, False)  # still turning
+
+
+def test_adventure_driver_resumes_driving_after_redirect_completes():
+    driver = _new_driver()
+    driver.update(on_red=True, motor_done=True)  # start redirect
+    driver.update(on_red=False, motor_done=False)  # turning...
+    continuous, command, _ = driver.update(on_red=False, motor_done=True)  # done
+    assert continuous is True
+    assert command is None
+    assert not driver.is_redirecting
+
+
+def test_adventure_driver_lost_if_on_red_after_redirect():
+    # redirect completes → enters clearing phase (drive forward to get off the line)
+    driver = _new_driver()
+    driver.update(on_red=True, motor_done=True)  # start redirect
+    driver.update(on_red=False, motor_done=False)  # turning...
+    continuous, command, lost = driver.update(on_red=False, motor_done=True)  # redirect done → clearing
+    assert continuous is True and command is None and lost is False  # NOT lost yet; now in clearing
+
+
+def test_adventure_driver_clearing_drives_through_red():
+    driver = _new_driver()
+    driver.update(on_red=True, motor_done=True)  # start redirect
+    driver.update(on_red=False, motor_done=False)  # turning...
+    driver.update(on_red=False, motor_done=True)  # redirect done → clearing starts
+    for _ in range(_REDIRECT_CLEAR_TICKS - 1):
+        continuous, command, lost = driver.update(on_red=True, motor_done=True)
+        assert continuous is True and command is None and lost is False  # ignores red during clearing
+
+
+def test_adventure_driver_lost_after_clearing_still_on_red():
+    driver = _new_driver()
+    driver.update(on_red=True, motor_done=True)
+    driver.update(on_red=False, motor_done=False)
+    driver.update(on_red=False, motor_done=True)  # → clearing
+    for _ in range(_REDIRECT_CLEAR_TICKS - 1):
+        driver.update(on_red=True, motor_done=True)  # clearing ticks pass
+    continuous, command, lost = driver.update(on_red=True, motor_done=True)  # clearing expires on red
+    assert lost is True and continuous is False and command is None
+    assert not driver.is_redirecting
+
+
+def test_adventure_driver_clears_successfully_when_off_red():
+    driver = _new_driver()
+    driver.update(on_red=True, motor_done=True)
+    driver.update(on_red=False, motor_done=False)
+    driver.update(on_red=False, motor_done=True)  # → clearing
+    for _ in range(_REDIRECT_CLEAR_TICKS - 1):
+        driver.update(on_red=False, motor_done=True)
+    continuous, command, lost = driver.update(on_red=False, motor_done=True)  # clearing expires, clear
+    assert lost is False and continuous is True and command is None
+
+
+def test_adventure_driver_eventually_issues_a_voluntary_turn():
+    # ticks=1 so the drive phase expires every tick; 50 iterations easily covers the 40% turn chance
+    driver = _new_driver(ticks=1)
+    for _ in range(50):
+        continuous, command, _ = driver.update(on_red=False, motor_done=True)
+        if command is not None:
+            assert isinstance(command, TurnCommand)
+            assert not driver.is_redirecting
+            return
+    raise AssertionError("Expected a voluntary TurnCommand within 50 ticks")
+
+
+def test_adventure_driver_waits_for_motor_done_after_voluntary_turn():
+    driver = _new_driver(ticks=1)
+    command = None
+    for _ in range(50):
+        _, command, _ = driver.update(on_red=False, motor_done=True)
+        if command is not None:
+            break
+    assert command is not None
+    assert driver.update(on_red=False, motor_done=False) == (False, None, False)  # still turning
+    continuous, cmd, _ = driver.update(on_red=False, motor_done=True)  # done
+    assert continuous is True
+    assert cmd is None
+
+
+def test_adventure_driver_reset_returns_to_drive_state():
+    driver = _new_driver()
+    driver.update(on_red=True, motor_done=True)  # start redirect
+    assert driver.is_redirecting
+    driver.reset()
+    assert not driver.is_redirecting
+    continuous, command, _ = driver.update(on_red=False, motor_done=True)
+    assert continuous is True
+    assert command is None
+
+
+def test_adventure_driver_voluntary_turn_within_range():
+    driver = _new_driver(ticks=1)
+    for _ in range(100):
+        _, command, _ = driver.update(on_red=False, motor_done=True)
+        if command is not None:
+            assert not driver.is_boosting
+            assert abs(command.degrees) <= 180.0

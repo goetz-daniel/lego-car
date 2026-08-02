@@ -65,7 +65,7 @@ class Settings:
     max_speed_percent: float
     turn_scale: float
 
-    # Red boundary-line safety stop (free-drive mode only)
+    # Red boundary-line safety stop (FREE and LINE modes; adventure handles red autonomously)
     lift_reflection_threshold: int
     boundary_color: int
 
@@ -86,6 +86,13 @@ class Settings:
     line_follow_scan_degrees: float
     line_follow_look_straight_ticks: int
     line_follow_turn_speed_percent: float
+
+    # Adventure mode: autonomous wander mode inside a red-bordered arena
+    adventure_speed_percent: float
+    adventure_boost_speed_percent: float
+    adventure_turn_speed_percent: float
+    adventure_drive_ticks_min: int
+    adventure_drive_ticks_max: int
 
     # Gamepad calibration wizard
     calibration_axis_hold_s: float
@@ -122,6 +129,11 @@ _STARTING_SETTINGS = Settings(
     line_follow_scan_degrees=90.0,  # the wider fallback sweep if the small nudge doesn't find it
     line_follow_look_straight_ticks=2,
     line_follow_turn_speed_percent=10,  # slow -- the sensor must catch the line mid-turn
+    adventure_speed_percent=40.0,
+    adventure_boost_speed_percent=70.0,
+    adventure_turn_speed_percent=30.0,
+    adventure_drive_ticks_min=10,
+    adventure_drive_ticks_max=30,
     calibration_axis_hold_s=5.0,
     calibration_axis_noise_threshold=0.3,
     calibration_poll_interval_s=0.02,

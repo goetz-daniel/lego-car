@@ -28,6 +28,11 @@ class BoundaryGuard:
     def is_blocked(self) -> bool:
         return self._state is BoundaryState.BLOCKED
 
+    def reset(self) -> None:
+        """Clears any blocked state, e.g. on a mode switch — next update() starts fresh."""
+        self._state = BoundaryState.FREE
+        self._has_been_lifted = False
+
     def update(self, on_boundary: bool, is_lifted: bool) -> tuple[bool, bool]:
         """Call once per loop tick. Returns (just_blocked, just_released) for one-shot side effects."""
         just_blocked = False

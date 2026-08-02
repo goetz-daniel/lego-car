@@ -6,6 +6,7 @@ Run from the repository root (with the venv activated):
 
 import time
 from collections.abc import Callable
+from enum import Enum
 
 import legoeducation as le
 
@@ -16,6 +17,7 @@ from car.robot.audio import AudioPlayer
 from car.robot.boundary import BoundaryGuard
 from car.robot.colorsensor import CarColorSensor
 from car.robot.drive import (
+    AdventureDriver,
     DriveDirection,
     DriveToggle,
     LineFollower,
@@ -32,7 +34,41 @@ from car.robot.voice import VoiceLines
 from car.settings import Settings, load as load_settings, save as save_settings
 from car.ui import Dashboard, banner, console, error, success
 
-_CONTROL_X: tuple[str, str] = ("X button", "Switch between free-drive and line-follower")
+
+class DriveMode(Enum):
+    """The three operating modes, cycled in order by the X button."""
+
+    FREE = "FREE-DRIVE"
+    LINE = "LINE-FOLLOWER"
+    ADVENTURE = "ADVENTURE"
+
+    def next(self) -> "DriveMode":
+        members = list(DriveMode)
+        return members[(members.index(self) + 1) % len(members)]
+
+    def light_color(self) -> int:
+        if self is DriveMode.FREE:
+            return le.LEGO_COLOR_GREEN
+        if self is DriveMode.LINE:
+            return le.LEGO_COLOR_BLUE
+        return le.LEGO_COLOR_YELLOW  # ADVENTURE
+
+    def instruction_name(self) -> str:
+        if self is DriveMode.FREE:
+            return "freeride"
+        if self is DriveMode.LINE:
+            return "linefollower"
+        return "adventure"
+
+    def detail_label(self) -> str:
+        if self is DriveMode.LINE:
+            return "Segment"
+        if self is DriveMode.ADVENTURE:
+            return "State"
+        return "Boost"
+
+
+_CONTROL_X: tuple[str, str] = ("X button", "Cycle modes: Free-Drive → Line-Follower → Adventure")
 _CONTROL_Y: tuple[str, str] = ("Y button", "Play a random driver comment")
 _CONTROL_EXIT: tuple[str, str] = ("Ctrl+C", "Stop and disconnect")
 _FREE_DRIVE_CONTROLS: tuple[tuple[str, str], ...] = (
@@ -44,12 +80,17 @@ _FREE_DRIVE_CONTROLS: tuple[tuple[str, str], ...] = (
     ("Boost trigger/button", "Boost speed (hold)"),
     _CONTROL_EXIT,
 )
-_LINE_FOLLOWER_CONTROLS: tuple[tuple[str, str], ...] = (
+_TOGGLE_CONTROLS: tuple[tuple[str, str], ...] = (
     ("A button", "Press once to start, again to stop"),
     _CONTROL_X,
     _CONTROL_Y,
     _CONTROL_EXIT,
 )
+_CONTROLS: dict[DriveMode, tuple[tuple[str, str], ...]] = {
+    DriveMode.FREE: _FREE_DRIVE_CONTROLS,
+    DriveMode.LINE: _TOGGLE_CONTROLS,
+    DriveMode.ADVENTURE: _TOGGLE_CONTROLS,
+}
 
 
 def _connect_gamepad(settings: Settings) -> Gamepad:
@@ -131,33 +172,49 @@ def _run_drive_loop(
 ) -> None:
     """Reads the gamepad and drives the motors until interrupted with Ctrl+C.
 
-    The red boundary line is guarded against in both modes, as an extra safety net: the
-    line-follower is expected to stay within its own track, but if it ever does reach the boundary
-    line it blocks exactly like free-drive does, rather than assuming that can never happen. A live
-    dashboard (laps, speed, mode, ...) updates in place below any one-off messages (errors, mode
-    switches, etc.), which keep printing normally.
+    The red boundary line causes a full halt in FREE and LINE modes; adventure mode handles it
+    autonomously via AdventureDriver's redirect turn, so the boundary guard is bypassed there.
+    A live dashboard (laps, speed, mode, ...) updates in place below any one-off messages
+    (errors, mode switches, etc.), which keep printing normally.
     """
-    line_follow_active = False
+    # ── shared ────────────────────────────────────────────────────────────────────────────
+    mode = DriveMode.FREE
+    drive_toggle = DriveToggle()
+    boundary_guard = BoundaryGuard()
+    goal_count = 0
+    lap_start_time: float | None = None
+    last_lap_time: float | None = None
+    best_lap_time: float | None = None
+    was_bumped = False
+
+    # ── line-follower ────────────────────────────────────────────────────────────────────
     track_tracker = TrackSegmentTracker(settings.line_follow_segment_confirm_ticks)
     line_follower = LineFollower(
         settings.line_follow_small_scan_degrees,
         settings.line_follow_scan_degrees,
         settings.line_follow_look_straight_ticks,
     )
-    active_command: TurnCommand | None = None  # last dispatched, still in-flight command -- display only
+    active_command: TurnCommand | None = None  # still-in-flight command; for dashboard display only
     boost_sound_delay_remaining = 0
-    drive_toggle = DriveToggle()
-    goal_count = 0
-    boundary_guard = BoundaryGuard()
-    was_bumped = False
-    was_boosting = False
-    was_line_boosting = False
-    was_searching = False
     track_acquired = False
     lap_baseline_set = False  # the very first confirmed segment never counts as a lap, even if it's white
+    was_line_boosting = False
+    was_searching = False
+
+    # ── adventure ─────────────────────────────────────────────────────────────────────
+    adventure_driver = AdventureDriver(
+        settings.adventure_drive_ticks_min,
+        settings.adventure_drive_ticks_max,
+    )
+    adventure_started = False
+    was_redirecting = False
+    was_adv_boosting = False
+
+    # ── free-drive ────────────────────────────────────────────────────────────────────
+    was_boosting = False
     try:
         with Dashboard() as dashboard:
-            _set_light(motors, colorsensor, le.LEGO_COLOR_GREEN)  # starts in free-drive mode
+            _set_light(motors, colorsensor, mode.light_color())
             while True:
                 gamepad.poll()
                 audio_player.update()
@@ -170,55 +227,65 @@ def _run_drive_loop(
                     voice.play_voice("crash", queue=True)
                 was_bumped = bumped
 
-                on_boundary = color == settings.boundary_color
-                is_lifted = colorsensor.is_lifted(reflection, settings.lift_reflection_threshold)
-                just_blocked, just_released = boundary_guard.update(on_boundary, is_lifted)
-                if just_blocked:
-                    sound.play_honk()
-                    voice.play_voice("boundaryline", queue=True)
-                    _set_light(motors, colorsensor, le.LEGO_COLOR_RED, le.LIGHT_PATTERN_SHORT_BLINK)
-                if just_released:
-                    motors.release()
-                    _set_light(motors, colorsensor, le.LEGO_COLOR_BLUE if line_follow_active else le.LEGO_COLOR_GREEN)
-                if boundary_guard.is_blocked:
-                    motors.block()
-                    # keep edge-detection state current so a held X/Y doesn't fire the instant the block clears
-                    gamepad.button_just_pressed(settings.gamepad.button_x)
-                    gamepad.button_just_pressed(settings.gamepad.button_y)
-                    dashboard.update(
-                        mode="LINE-FOLLOWER" if line_follow_active else "FREE-DRIVE",
-                        laps=goal_count,
-                        speed_left=0,
-                        speed_right=0,
-                        detail="-",
-                        status="BOUNDARY BLOCKED — lift car and place it back inside",
-                        controls=_LINE_FOLLOWER_CONTROLS if line_follow_active else _FREE_DRIVE_CONTROLS,
-                    )
-                    time.sleep(settings.loop_interval_s)
-                    continue
+                if mode is not DriveMode.ADVENTURE:
+                    on_boundary = color == settings.boundary_color
+                    is_lifted = colorsensor.is_lifted(reflection, settings.lift_reflection_threshold)
+                    just_blocked, just_released = boundary_guard.update(on_boundary, is_lifted)
+                    if just_blocked:
+                        sound.play_honk()
+                        voice.play_voice("boundaryline", queue=True)
+                        _set_light(motors, colorsensor, le.LEGO_COLOR_RED, le.LIGHT_PATTERN_SHORT_BLINK)
+                    if just_released:
+                        motors.release()
+                        _set_light(motors, colorsensor, mode.light_color())
+                    if boundary_guard.is_blocked:
+                        motors.block()
+                        # keep edge-detection state current so a held X/Y doesn't fire the instant the block clears
+                        gamepad.button_just_pressed(settings.gamepad.button_x)
+                        gamepad.button_just_pressed(settings.gamepad.button_y)
+                        dashboard.update(
+                            mode=mode.value,
+                            laps=goal_count if mode is DriveMode.LINE else None,
+                            speed_left=0,
+                            speed_right=0,
+                            detail="-",
+                            detail_label=mode.detail_label(),
+                            status="BOUNDARY BLOCKED — lift car and place it back inside",
+                            controls=_CONTROLS[mode],
+                        )
+                        time.sleep(settings.loop_interval_s)
+                        continue
 
                 if gamepad.button_just_pressed(settings.gamepad.button_x):
-                    line_follow_active = not line_follow_active
-                    # start each activation fresh, ignoring prior segment/boost/search history, and
-                    # stop driving on the switch so a mode change never carries over a driving intent
+                    mode = mode.next()
+                    motors.stop()  # cut any in-flight command immediately
+                    boundary_guard.reset()
+                    # reset all mode-specific state so nothing carries over into the new mode
                     track_tracker = TrackSegmentTracker(settings.line_follow_segment_confirm_ticks)
                     line_follower.reset()
+                    adventure_driver.reset()
                     active_command = None
                     boost_sound_delay_remaining = 0
                     drive_toggle.stop()
                     was_boosting = False
                     was_line_boosting = False
                     was_searching = False
+                    was_redirecting = False
+                    was_adv_boosting = False
                     track_acquired = False
                     lap_baseline_set = False
-                    voice.play_instruction("linefollower" if line_follow_active else "freeride")
-                    _set_light(motors, colorsensor, le.LEGO_COLOR_BLUE if line_follow_active else le.LEGO_COLOR_GREEN)
+                    lap_start_time = None
+                    goal_count = 0
+                    last_lap_time = None
+                    best_lap_time = None
+                    adventure_started = False
+                    voice.play_instruction(mode.instruction_name())
+                    _set_light(motors, colorsensor, mode.light_color())
 
-                # read every tick (even in free-drive, which ignores it) so A's edge state isn't stale
-                # by the time line-follower mode's toggle starts consuming it
+                # read every tick to keep A's edge state current across all modes
                 forward_pressed = gamepad.button_just_pressed(settings.gamepad.button_a)
 
-                if line_follow_active:
+                if mode is DriveMode.LINE:
                     detected_segment = classify_track_segment(
                         color,
                         settings.line_follow_normal_color,
@@ -287,9 +354,16 @@ def _run_drive_loop(
                         # started" -- only a later, genuine transition into white counts as a lap
                         is_first_segment = not lap_baseline_set
                         lap_baseline_set = True
-                        if track_tracker.current is TrackSegment.GOAL and not is_first_segment:
-                            goal_count += 1
-                            sound.play_honk()
+                        if is_first_segment:
+                            lap_start_time = time.monotonic()  # start clock on first segment so every GOAL has a measurable time
+                        if track_tracker.current is TrackSegment.GOAL:
+                            if not is_first_segment:
+                                lap_time = time.monotonic() - lap_start_time
+                                last_lap_time = lap_time
+                                best_lap_time = lap_time if best_lap_time is None else min(best_lap_time, lap_time)
+                                goal_count += 1
+                                sound.play_honk()
+                            lap_start_time = time.monotonic()  # restart clock at each GOAL crossing
                         # delayed so the sound lands after the motor's own ramp has started speeding up
                         boost_sound_delay_remaining = (
                             settings.line_follow_boost_sound_delay_ticks if track_tracker.current is TrackSegment.BOOST else 0
@@ -313,28 +387,101 @@ def _run_drive_loop(
                     # exception: drive_straight deliberately cancels an in-flight scan to resume)
                     if drive_straight:
                         motors.drive(speed_percent, speed_percent)
-                    elif isinstance(command, TurnCommand):
+                    elif command is not None:
                         motors.turn_for_degrees(command.degrees, settings.line_follow_turn_speed_percent)
 
-                    # dashboard speed display only -- reflects the currently active maneuver (which
-                    # may have been dispatched on an earlier tick and still be in flight)
                     if drive_straight:
                         speed_left = speed_right = speed_percent
-                    elif isinstance(active_command, TurnCommand):
+                    elif active_command is not None:
                         turn_sign = 1.0 if active_command.degrees >= 0 else -1.0
                         speed_left = turn_sign * settings.line_follow_turn_speed_percent
                         speed_right = -turn_sign * settings.line_follow_turn_speed_percent
                     else:
                         speed_left = speed_right = 0.0
 
+                    lap_elapsed = (time.monotonic() - lap_start_time) if lap_start_time is not None else None
                     dashboard.update(
-                        mode="LINE-FOLLOWER",
+                        mode=mode.value,
                         laps=goal_count,
                         speed_left=speed_left,
                         speed_right=speed_right,
                         detail=track_tracker.current.name,
+                        detail_label=mode.detail_label(),
                         status="SEARCHING FOR LINE" if searching else ("OK" if forward else "STOPPED"),
-                        controls=_LINE_FOLLOWER_CONTROLS,
+                        controls=_CONTROLS[mode],
+                        lap_elapsed=lap_elapsed,
+                        last_lap_time=last_lap_time,
+                        best_lap_time=best_lap_time,
+                    )
+                elif mode is DriveMode.ADVENTURE:
+                    forward = direction_to_forward(drive_toggle.update(forward_pressed, False))
+
+                    if forward:
+                        if not adventure_started:
+                            voice.play_voice("startadventure")
+                            adventure_started = True
+                        on_red = color == settings.boundary_color
+                        motor_done = motors.is_done()
+                        adv_drive, adv_command, adv_lost = adventure_driver.update(on_red, motor_done)
+                        if adv_lost:
+                            sound.play_honk()
+                            voice.play_voice("losttrack", queue=True)
+                            drive_toggle.stop()
+                            motors.stop()
+                            adventure_started = False
+                            forward = 0.0  # treat as stopped for light and dashboard this tick
+                            speed_left = speed_right = 0.0
+                        elif adv_command is not None:
+                            if on_red:
+                                sound.play_honk()
+                            motors.turn_for_degrees(adv_command.degrees, settings.adventure_turn_speed_percent)
+                            speed_left = speed_right = 0.0
+                        elif adv_drive:
+                            boosting = adventure_driver.is_boosting
+                            if boosting and not was_adv_boosting:
+                                sound.play_boost()
+                            was_adv_boosting = boosting
+                            spd = (
+                                settings.adventure_boost_speed_percent
+                                if boosting
+                                else settings.adventure_speed_percent
+                            )
+                            drift = adventure_driver.steer * spd
+                            speed_left = max(-100.0, min(100.0, spd + drift))
+                            speed_right = max(-100.0, min(100.0, spd - drift))
+                            motors.drive(speed_left, speed_right)
+                        else:
+                            speed_left = speed_right = 0.0
+                    else:
+                        if adventure_started:
+                            adventure_driver.reset()
+                            adventure_started = False
+                        motors.stop()
+                        speed_left = speed_right = 0.0
+
+                    was_redirecting = _set_light_on_change(
+                        motors,
+                        colorsensor,
+                        bool(forward) and adventure_driver.is_redirecting,
+                        was_redirecting,
+                        le.LEGO_COLOR_RED,
+                        le.LEGO_COLOR_YELLOW,
+                        le.LIGHT_PATTERN_SHORT_BLINK,
+                    )
+                    if adventure_driver.is_redirecting:
+                        detail = "REDIRECTING"
+                    elif adventure_driver.is_boosting:
+                        detail = "BOOST"
+                    else:
+                        detail = "DRIVING"
+                    dashboard.update(
+                        mode=mode.value,
+                        speed_left=speed_left,
+                        speed_right=speed_right,
+                        detail=detail if forward else "-",
+                        detail_label=mode.detail_label(),
+                        status="OK" if forward else "STOPPED",
+                        controls=_CONTROLS[mode],
                     )
                 else:
                     forward_held = gamepad.button_held(settings.gamepad.button_a)
@@ -349,13 +496,13 @@ def _run_drive_loop(
                     )
                     speed_left, speed_right = arcade_drive(forward, turn, throttle, settings.turn_scale)
                     dashboard.update(
-                        mode="FREE-DRIVE",
-                        laps=goal_count,
+                        mode=mode.value,
                         speed_left=speed_left,
                         speed_right=speed_right,
                         detail="BOOST" if boost_amount > 0 else "-",
+                        detail_label=mode.detail_label(),
                         status="OK" if forward else "STOPPED",
-                        controls=_FREE_DRIVE_CONTROLS,
+                        controls=_CONTROLS[mode],
                     )
                     motors.drive(speed_left, speed_right)
 
@@ -398,6 +545,8 @@ def main() -> int:
         motors.disconnect()
         gamepad.close()
         return 1
+
+    _set_light(motors, colorsensor, DriveMode.FREE.light_color())  # set mode colour as early as possible
 
     audio_player = AudioPlayer()
     sound = CarSound(settings.honk_sound_file, settings.boost_sound_file, audio_player)

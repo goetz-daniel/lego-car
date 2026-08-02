@@ -22,9 +22,9 @@ from car.robot.audio import AudioPlayer
 ASSETS_DIR = Path(__file__).resolve().parent.parent / "assets"
 
 # voice/<category>/ subfolder names; each needs at least a "1.mp3" to satisfy its callers below
-COMMENT_CATEGORIES = ("comments", "boundaryline", "losttrack", "crash", "starttrack")
+COMMENT_CATEGORIES = ("comments", "boundaryline", "losttrack", "crash", "starttrack", "startadventure")
 # instructions/<name>.mp3 clips; each is a single fixed file, not a random pick
-INSTRUCTION_NAMES = ("freeride", "linefollower")
+INSTRUCTION_NAMES = ("freeride", "linefollower", "adventure")
 
 
 class VoiceLines:

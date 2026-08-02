@@ -3,14 +3,16 @@
 A LEGO Education car with manual Bluetooth gamepad control and an autonomous multi-color
 line-following mode. Built on the [LEGO Education Python API](https://github.com/LEGO/LEGOEducation).
 
-[![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![Python 3.14+](https://img.shields.io/badge/python-3.14%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 
 ## Features
 
 - Free-drive: manual gamepad control with proportional turning, reverse, and boost.
 - Line-follower: autonomous track driving with a boost segment, a lap-counting finish line, and
   a lost-line search that resumes the instant the line is found again.
-- Boundary safety stop: a red tape line blocks the wheels in either mode.
+- Adventure: autonomous wander mode inside a red-bordered arena with random turns, boosts, spins,
+  and instant boundary-triggered redirection — no track needed.
+- Boundary safety stop: a red tape line blocks the wheels in free-drive and line-follower modes.
 - Sound and voice: honks, boost effects, and spoken driver comments (any language).
 - Status light: at-a-glance mode/state indicator on the motor and sensor.
 - Auto-calibrating: a one-time wizard detects any gamepad's button/stick layout.
@@ -43,7 +45,7 @@ both are saved to `car/settings.json` and never asked again.
 | --- | --- |
 | A button | Hold to drive forward |
 | B button | Hold to drive backward |
-| X button | Switch between free-drive and line-follower |
+| X button | Cycle modes: Free-Drive → Line-Follower → Adventure |
 | Y button | Play a random driver comment |
 | Stick | Steer left/right |
 | Trigger | Boost speed (hold) |
@@ -54,7 +56,16 @@ both are saved to `car/settings.json` and never asked again.
 | Input | Action |
 | --- | --- |
 | A button | Press once to start, again to stop |
-| X button | Switch between free-drive and line-follower |
+| X button | Cycle modes: Free-Drive → Line-Follower → Adventure |
+| Y button | Play a random driver comment |
+| Ctrl+C | Stop and disconnect |
+
+### Adventure
+
+| Input | Action |
+| --- | --- |
+| A button | Press once to start, again to stop |
+| X button | Cycle modes: Free-Drive → Line-Follower → Adventure |
 | Y button | Play a random driver comment |
 | Ctrl+C | Stop and disconnect |
 
@@ -80,14 +91,19 @@ line can't be found at all, it stops, honks, and waits to be repositioned by han
 only starts driving if blue or white is already under the sensor. The segment the car starts on
 is never counted as a lap — only a later, genuine arrival at white is.
 
+**Adventure** — toggle with X, start/stop with A. Place the car anywhere inside a red-bordered
+arena. The car drives freely, mixing random turns, boosts, and varying drive styles for variety. When it
+sees red it stops, honks, turns to a new random direction, and resumes — no intervention needed.
+
 ## Status Light
 
 | Color | Meaning |
 | --- | --- |
 | Green | Free-drive, driving normally |
 | Blue | Line-follower, driving normally |
-| Orange | Boosting, either mode |
-| Red, blinking | Boundary blocked, or line-follower searching |
+| Yellow | Adventure mode, autonomous driving |
+| Orange | Boosting (free-drive or line-follower) |
+| Red, blinking | Boundary blocked, line-follower searching, or adventure redirecting |
 
 ## Building the Track
 
@@ -97,7 +113,7 @@ is never counted as a lap — only a later, genuine arrival at white is.
 - Only one white segment — it's the single finish line.
 - Verify detected colors with the sensor and adjust `settings.json` to match your tape.
 
-Surround the track with a red boundary strip a comfortable distance out.
+Surround the track with a red boundary strip a comfortable distance out — lay two tape widths side by side so the sensor reliably detects red regardless of where it crosses the line.
 
 ## Configuration
 

@@ -31,3 +31,11 @@ def test_boundary_guard_releases_after_being_lifted_and_placed_back_down_clear()
     assert not just_blocked
     assert just_released
     assert not guard.is_blocked
+
+
+def test_boundary_guard_reset_clears_blocked_state():
+    guard = BoundaryGuard()
+    guard.update(on_boundary=True, is_lifted=False)
+    assert guard.is_blocked
+    guard.reset()
+    assert not guard.is_blocked

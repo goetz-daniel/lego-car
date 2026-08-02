@@ -55,7 +55,8 @@ python -m car.main
 - Segment detection uses the categorical LEGO Color, not raw RGB/HSV — lighting-tolerant, and a
   single fixed sensor has no positional offset to steer on anyway.
 - `"starttrack"` plays once per track (re)acquisition, not on every brief mid-drive rescan.
-- The red boundary stop applies in both modes identically.
+- The red boundary stop applies in FREE and LINE modes; adventure mode handles red autonomously
+  via `AdventureDriver`'s redirect turn — the `BoundaryGuard` is bypassed entirely in adventure.
 
 ## Audio
 
@@ -82,7 +83,7 @@ python -m car.main
   `Gamepad._read_indices()`, `_load_optional[T]()` in `car/settings.py`, `DriveToggle`/
   `direction_to_forward()`, and `ui.Dashboard` (in-place live stats — never plain `console.print()`
   for per-tick telemetry). `Dashboard.update()`'s `controls` argument is the current mode's rows
-  from `car/main.py`'s `_FREE_DRIVE_CONTROLS`/`_LINE_FOLLOWER_CONTROLS` — pass the matching one at
+  from `car/main.py`'s `_FREE_DRIVE_CONTROLS`/`_TOGGLE_CONTROLS` — pass the matching one at
   every call site so the live display always reflects the active mode, never a stale one.
 - Prefer a built-in LEGO Education library function over hand-rolled logic — e.g. the Double
   Motor's own acceleration ramp already smooths every speed change; don't add a second,
