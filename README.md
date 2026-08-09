@@ -55,7 +55,7 @@ cd lego-car
 brew install python@3.14
 ```
 
-**Windows Command Prompt:**
+**Windows:**
 
 ```bat
 winget install Python.Python.3.14
