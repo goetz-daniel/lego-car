@@ -149,8 +149,8 @@ All options in `car/settings.json`, created automatically on first run.
 | Library | What it does |
 | --- | --- |
 | [legoeducation](https://github.com/LEGO/LEGOEducation) | Controls the LEGO hubs |
-| [pygame-ce](https://pyga.me/) | Reads the gamepad, plays sounds |
-| [rich](https://rich.readthedocs.io/) | Live terminal dashboard |
+| [pygame-ce](https://github.com/pygame-community/pygame-ce) | Reads the gamepad, plays sounds |
+| [rich](https://github.com/Textualize/rich) | Live terminal dashboard |
 
 ---
 
