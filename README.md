@@ -7,9 +7,17 @@ or roam an arena solo. Three drive modes, sounds, voice comments, lap counter, l
 [![MIT](https://img.shields.io/badge/license-MIT-22c55e?style=for-the-badge)](LICENSE)
 ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey?style=for-the-badge)
 
+<p align="center">
+  <a href="instructions/car-front.jpeg"><img src="instructions/car-front.jpeg" width="45%" alt="Front view of the car on the track"></a>&nbsp;&nbsp;<a href="instructions/car-back.jpeg"><img src="instructions/car-back.jpeg" width="45%" alt="Rear view of the car with minifigures"></a>
+</p>
+
 ---
 
 ## Hardware
+
+The car's physical build is based on lesson B101 *Castle Quest* from the
+[LEGO Education Computer Science & AI](https://teach.legoeducation.com/de-de/computer-science/lesson/castle-quest/building-instructions) B1 curriculum,
+extended with a Bluetooth gamepad, speaker, and custom Python software.
 
 | Part | Role |
 | --- | --- |
@@ -17,6 +25,10 @@ or roam an arena solo. Three drive modes, sounds, voice comments, lap counter, l
 | LEGO Education Color Sensor | Reads the tape (mounted facing down at the front) |
 | Bluetooth or USB gamepad | Your controller |
 | Bluetooth speaker | Set as default audio output |
+
+<p align="center">
+  <a href="instructions/car-bottom.jpeg"><img src="instructions/car-bottom.jpeg" width="60%" alt="Color sensor mounted facing down at the front of the car"></a>
+</p>
 
 ---
 
@@ -66,6 +78,14 @@ python -m car.main
 On first run you'll be asked for your **Connection Card** (the code printed on the hub and sensor)
 and a quick gamepad calibration — both saved automatically, never asked again.
 
+<p align="center">
+  <a href="instructions/car-card.jpeg"><img src="instructions/car-card.jpeg" width="50%" alt="Holding the Connection Card next to the car"></a>
+</p>
+
+<p align="center">
+  <a href="instructions/setup-terminal.png"><img src="instructions/setup-terminal.png" width="70%" alt="First-run terminal showing Connection Card prompts and gamepad calibration"></a>
+</p>
+
 ---
 
 ## Track Colors
@@ -79,17 +99,23 @@ Lay matte electrical tape on the floor in four colors:
 | White | Finish line — one lap per crossing |
 | Red | Boundary — stops/redirects the car |
 
-No gaps or overlaps between strips. One white strip only. Lay red boundary as a double-width
-strip so it's always detected. If a color isn't recognized, adjust the `*_color` value in
-`car/settings.json`.
+No gaps or overlaps between strips. One white strip only. Lay red boundary as a double-width strip so it's always detected. If a color isn't recognized, adjust the `*_color` value in `car/settings.json`.
+
+<p align="center">
+  <a href="instructions/car-track.jpeg"><img src="instructions/car-track.jpeg" width="70%" alt="Top-down view of the full track with colored tape"></a>
+</p>
+
+<p align="center">
+  <a href="instructions/car-finish-line.jpeg"><img src="instructions/car-finish-line.jpeg" width="70%" alt="The car at the LEGO finish line gate"></a>
+</p>
 
 ---
 
 ## Controls
 
-The terminal shows only the active mode's controls.
-
 ### Free-Drive
+
+You steer. Crossing the red boundary locks the wheels until you lift the car clear.
 
 | Input | Action |
 | --- | --- |
@@ -101,7 +127,21 @@ The terminal shows only the active mode's controls.
 | Y | Random driver comment |
 | Ctrl+C | Quit |
 
-### Line-Follower / Adventure
+<p align="center">
+  <a href="instructions/free-drive-terminal.png"><img src="instructions/free-drive-terminal.png" width="70%" alt="Free-drive terminal dashboard showing mode, speed, and controls"></a>
+</p>
+
+### Line-Follower
+
+Press X then A. Must see blue or white to start. Follows the tape straight; if the line is
+lost it scans left and right to find it again. Stops after two failed scans and waits.
+
+### Adventure
+
+Press X then A. Drop the car inside a red-tape border — it drives itself, bouncing off the
+boundary and picking new directions randomly.
+
+Both modes share the same controls:
 
 | Input | Action |
 | --- | --- |
@@ -110,23 +150,9 @@ The terminal shows only the active mode's controls.
 | Y | Random driver comment |
 | Ctrl+C | Quit |
 
----
-
-## Modes
-
-### Free-Drive
-
-You steer. Crossing the red boundary locks the wheels until you lift the car clear.
-
-### Line-Follower
-
-Press X then A. Must see blue or white to start. Follows the tape straight; if the line is lost
-it scans left and right to find it again. Stops after two failed scans and waits.
-
-### Adventure
-
-Press X then A. Drop the car inside a red-tape border — it drives itself, bouncing off the
-boundary and picking new directions randomly.
+<p align="center">
+  <a href="instructions/line-follower-terminal.png"><img src="instructions/line-follower-terminal.png" width="70%" alt="Line-follower terminal dashboard showing lap times and controls"></a>
+</p>
 
 ---
 
