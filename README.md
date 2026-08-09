@@ -15,7 +15,7 @@ or roam an arena solo. Three drive modes, sounds, voice comments, lap counter, l
 
 ## Hardware
 
-The car's physical build is based on lesson B101 *Castle Quest* from the
+The car's physical build is a modified version of lesson B101 *Castle Quest* from the
 [LEGO Education Computer Science & AI](https://teach.legoeducation.com/de-de/computer-science/lesson/castle-quest/building-instructions) B1 curriculum,
 extended with a Bluetooth gamepad, speaker, and custom Python software.
 
@@ -83,7 +83,7 @@ and a quick gamepad calibration — both saved automatically, never asked again.
 </p>
 
 <p align="center">
-  <a href="instructions/setup-terminal.png"><img src="instructions/setup-terminal.png" width="70%" alt="First-run terminal showing Connection Card prompts and gamepad calibration"></a>
+  <a href="instructions/setup-terminal.png"><img src="instructions/setup-terminal.png" width="80%" alt="First-run terminal showing Connection Card prompts and gamepad calibration"></a>
 </p>
 
 ---
@@ -128,7 +128,7 @@ You steer. Crossing the red boundary locks the wheels until you lift the car cle
 | Ctrl+C | Quit |
 
 <p align="center">
-  <a href="instructions/free-drive-terminal.png"><img src="instructions/free-drive-terminal.png" width="70%" alt="Free-drive terminal dashboard showing mode, speed, and controls"></a>
+  <a href="instructions/free-drive-terminal.png"><img src="instructions/free-drive-terminal.png" width="80%" alt="Free-drive terminal dashboard showing mode, speed, and controls"></a>
 </p>
 
 ### Line-Follower
@@ -151,7 +151,7 @@ Both modes share the same controls:
 | Ctrl+C | Quit |
 
 <p align="center">
-  <a href="instructions/line-follower-terminal.png"><img src="instructions/line-follower-terminal.png" width="70%" alt="Line-follower terminal dashboard showing lap times and controls"></a>
+  <a href="instructions/line-follower-terminal.png"><img src="instructions/line-follower-terminal.png" width="80%" alt="Line-follower terminal dashboard showing lap times and controls"></a>
 </p>
 
 ---
