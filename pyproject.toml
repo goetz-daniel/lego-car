@@ -12,6 +12,7 @@ combine-as-imports = true
 
 [tool.pymarkdown]
 plugins.md013.enabled = false
+plugins.md024.siblings_only = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

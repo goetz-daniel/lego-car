@@ -1,31 +1,51 @@
 # LEGO Education Car
 
-A LEGO Education car with manual Bluetooth gamepad control and an autonomous multi-color
-line-following mode. Built on the [LEGO Education Python API](https://github.com/LEGO/LEGOEducation).
+Control your LEGO Double Motor car with a gamepad, follow a colored-tape track autonomously,
+or roam an arena solo. Three drive modes, sounds, voice comments, lap counter, live dashboard.
 
-[![Python 3.14+](https://img.shields.io/badge/python-3.14%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![Python 3.14+](https://img.shields.io/badge/python-3.14%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
+[![MIT](https://img.shields.io/badge/license-MIT-22c55e?style=for-the-badge)](LICENSE)
+![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey?style=for-the-badge)
 
-## Features
-
-- Free-drive: manual gamepad control with proportional turning, reverse, and boost.
-- Line-follower: autonomous track driving with a boost segment, a lap-counting finish line, and
-  a lost-line search that resumes the instant the line is found again.
-- Adventure: autonomous wander mode inside a red-bordered arena with random turns, boosts, spins,
-  and instant boundary-triggered redirection — no track needed.
-- Boundary safety stop: a red tape line blocks the wheels in free-drive and line-follower modes.
-- Sound and voice: honks, boost effects, and spoken driver comments (any language).
-- Status light: at-a-glance mode/state indicator on the motor and sensor.
-- Auto-calibrating: a one-time wizard detects any gamepad's button/stick layout.
-- Live dashboard: mode, lap count, wheel speed, and status in the terminal.
+---
 
 ## Hardware
 
-- LEGO Education Double Motor (differential/tank drive)
-- LEGO Education Color Sensor (mounted facing down at the front)
-- Any Bluetooth gamepad supported by pygame/SDL2
-- A Bluetooth speaker, set as the default audio output
+| Part | Role |
+| --- | --- |
+| LEGO Education Double Motor | Drives the car |
+| LEGO Education Color Sensor | Reads the tape (mounted facing down at the front) |
+| Bluetooth or USB gamepad | Your controller |
+| Bluetooth speaker | Set as default audio output |
 
-## Setup
+---
+
+## Getting Started
+
+### 1. Get the code
+
+```bash
+git clone https://github.com/goetz-daniel/lego-car.git
+cd lego-car
+```
+
+### 2. Install Python 3.14+
+
+**macOS / Linux:**
+
+```bash
+brew install python@3.14
+```
+
+**Windows:**
+
+```bat
+winget install Python.Python.3.14
+```
+
+### 3. Install and run
+
+**macOS / Linux:**
 
 ```bash
 python3.14 -m venv .venv
@@ -34,118 +54,111 @@ pip install -r requirements.txt
 python -m car.main
 ```
 
-First run prompts for each device's Connection Card and calibrates a new gamepad automatically;
-both are saved to `car/settings.json` and never asked again.
+**Windows:**
+
+```bat
+py -3.14 -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
+python -m car.main
+```
+
+On first run you'll be asked for your **Connection Card** (the code printed on the hub and sensor)
+and a quick gamepad calibration — both saved automatically, never asked again.
+
+---
+
+## Track Colors
+
+Lay matte electrical tape on the floor in four colors:
+
+| Color | Meaning |
+| --- | --- |
+| Blue | Normal path |
+| Green | Speed boost — faster as long as it's seen |
+| White | Finish line — one lap per crossing |
+| Red | Boundary — stops/redirects the car |
+
+No gaps or overlaps between strips. One white strip only. Lay red boundary as a double-width
+strip so it's always detected. If a color isn't recognized, adjust the `*_color` value in
+`car/settings.json`.
+
+---
 
 ## Controls
+
+The terminal shows only the active mode's controls.
 
 ### Free-Drive
 
 | Input | Action |
 | --- | --- |
-| A button | Hold to drive forward |
-| B button | Hold to drive backward |
-| X button | Cycle modes: Free-Drive → Line-Follower → Adventure |
-| Y button | Play a random driver comment |
-| Stick | Steer left/right |
-| Trigger | Boost speed (hold) |
-| Ctrl+C | Stop and disconnect |
+| A | Hold to drive forward |
+| B | Hold to drive backward |
+| Left stick | Steer |
+| Trigger | Boost |
+| X | Next mode |
+| Y | Random driver comment |
+| Ctrl+C | Quit |
 
-### Line-Follower
-
-| Input | Action |
-| --- | --- |
-| A button | Press once to start, again to stop |
-| X button | Cycle modes: Free-Drive → Line-Follower → Adventure |
-| Y button | Play a random driver comment |
-| Ctrl+C | Stop and disconnect |
-
-### Adventure
+### Line-Follower / Adventure
 
 | Input | Action |
 | --- | --- |
-| A button | Press once to start, again to stop |
-| X button | Cycle modes: Free-Drive → Line-Follower → Adventure |
-| Y button | Play a random driver comment |
-| Ctrl+C | Stop and disconnect |
+| A | Start / stop |
+| X | Next mode |
+| Y | Random driver comment |
+| Ctrl+C | Quit |
 
-The terminal shows only the current mode's controls, updating the instant you switch modes.
+---
 
 ## Modes
 
-**Free-Drive** — full manual control. Crossing the red boundary line blocks the wheels, honks,
-and plays a spoken warning until the car is lifted clear.
+### Free-Drive
 
-**Line-Follower** — toggle with X, start/stop with A. Drives a track built from colored tape:
+You steer. Crossing the red boundary locks the wheels until you lift the car clear.
 
-| Color | Meaning |
-| --- | --- |
-| Blue | Normal-speed line following |
-| Green | Continuous speed boost for as long as it's seen |
-| White | Finish line — honks and counts a lap |
-| Red | Boundary — blocks the wheels |
+### Line-Follower
 
-The car drives straight ahead as long as it sees blue, green, or white under the sensor. If it
-loses the line, it scans for it (widening the search if needed) and resumes automatically; if the
-line can't be found at all, it stops, honks, and waits to be repositioned by hand. A press of A
-only starts driving if blue or white is already under the sensor. The segment the car starts on
-is never counted as a lap — only a later, genuine arrival at white is.
+Press X then A. Must see blue or white to start. Follows the tape straight; if the line is lost
+it scans left and right to find it again. Stops after two failed scans and waits.
 
-**Adventure** — toggle with X, start/stop with A. Place the car anywhere inside a red-bordered
-arena. The car drives freely, mixing random turns, boosts, and varying drive styles for variety. When it
-sees red it stops, honks, turns to a new random direction, and resumes — no intervention needed.
+### Adventure
+
+Press X then A. Drop the car inside a red-tape border — it drives itself, bouncing off the
+boundary and picking new directions randomly.
+
+---
 
 ## Status Light
 
-| Color | Meaning |
+| Light | Meaning |
 | --- | --- |
-| Green | Free-drive, driving normally |
-| Blue | Line-follower, driving normally |
-| Yellow | Adventure mode, autonomous driving |
-| Orange | Boosting (free-drive or line-follower) |
-| Red, blinking | Boundary blocked, line-follower searching, or adventure redirecting |
+| Green | Free-drive |
+| Blue | Line-follower running |
+| Yellow | Adventure running |
+| Orange | Boosting |
+| Red, blinking | Blocked / searching / redirecting |
 
-## Building the Track
+---
 
-- Plain matte electrical tape in distinct colors (blue, green, white, red by default).
-- Lay strips seamlessly — no gaps, no overlaps.
-- Stretch tape slightly around curves to keep it flat.
-- Only one white segment — it's the single finish line.
-- Verify detected colors with the sensor and adjust `settings.json` to match your tape.
+## Settings & Libraries
 
-Surround the track with a red boundary strip a comfortable distance out — lay two tape widths side by side so the sensor reliably detects red regardless of where it crosses the line.
+All options in `car/settings.json`, created automatically on first run.
 
-## Configuration
-
-All tunable behavior lives in `car/settings.json`, created with defaults on first run — edit it
-directly, or let the app persist detected values (Connection Cards, gamepad mapping) itself.
-
-## Project Layout
-
-| Path | Description |
+| Library | What it does |
 | --- | --- |
-| `car/main.py` | Entry point and drive loop |
-| `car/cli.py` | Interactive Connection Card prompt |
-| `car/settings.py` | `settings.json` loading and saving |
-| `car/ui.py` | Shared console output helpers |
-| `car/controller/` | Gamepad input and calibration wizard |
-| `car/robot/` | Motor/sensor/sound hardware wrappers and pure drive/track/boundary logic |
-| `car/assets/` | Sound effects and spoken comments/instructions |
-| `tests/` | pytest suite for the pure-logic modules in `car/robot/` |
+| [legoeducation](https://github.com/LEGO/LEGOEducation) | Controls the LEGO hubs |
+| [pygame-ce](https://pyga.me/) | Reads the gamepad, plays sounds |
+| [rich](https://rich.readthedocs.io/) | Live terminal dashboard |
 
-## Built With
-
-| Library | Purpose |
-| --- | --- |
-| [legoeducation](https://github.com/LEGO/LEGOEducation) | LEGO hub/motor/sensor control |
-| [pygame-ce](https://pyga.me/) | Gamepad input and audio playback |
-| [rich](https://rich.readthedocs.io/) | Terminal UI and live dashboard |
+---
 
 ## Development
 
 ```bash
 pip install -r requirements-dev.txt
-python -m pytest                                    # tests
-ruff check car/ && ruff format car/                 # lint & format
-pymarkdown --config pyproject.toml scan README.md   # markdown lint
+python -m pytest
+ruff check car/ tests/ && ruff format car/ tests/
+pymarkdown --config pyproject.toml scan README.md AGENTS.md
 ```
