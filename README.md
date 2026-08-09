@@ -16,15 +16,19 @@ or roam an arena solo. Three drive modes, sounds, voice comments, lap counter, l
 ## Hardware
 
 The car's physical build is a modified version of lesson B101 *Castle Quest* from the
-[LEGO Education Computer Science & AI](https://teach.legoeducation.com/de-de/computer-science/lesson/castle-quest/building-instructions) B1 curriculum,
+[LEGO Education Computer Science & AI](https://teach.legoeducation.com/computer-science/lesson/castle-quest/building-instructions) B1 curriculum (8+ kit),
 extended with a Bluetooth gamepad, speaker, and custom Python software.
 
 | Part | Role |
 | --- | --- |
 | LEGO Education Double Motor | Drives the car |
 | LEGO Education Color Sensor | Reads the tape (mounted facing down at the front) |
+| Computer | Runs Python and connects to the LEGO hardware |
 | Bluetooth or USB gamepad | Your controller |
-| Bluetooth speaker | Set as default audio output |
+| Speaker | Output for sound effects and voice comments |
+
+> [!IMPORTANT]
+> The Color Sensor must be mounted as close to the ground as possible, so it reliably reads the tape colors.
 
 <p align="center">
   <a href="instructions/car-bottom.jpeg"><img src="instructions/car-bottom.jpeg" width="60%" alt="Color sensor mounted facing down at the front of the car"></a>
@@ -36,6 +40,8 @@ extended with a Bluetooth gamepad, speaker, and custom Python software.
 
 ### 1. Get the code
 
+Open a terminal in the folder where you want to save the project, then run:
+
 ```bash
 git clone https://github.com/goetz-daniel/lego-car.git
 cd lego-car
@@ -43,19 +49,21 @@ cd lego-car
 
 ### 2. Install Python 3.14+
 
-**macOS / Linux:**
+**macOS / Linux with Homebrew:**
 
 ```bash
 brew install python@3.14
 ```
 
-**Windows:**
+**Windows Command Prompt:**
 
 ```bat
 winget install Python.Python.3.14
 ```
 
 ### 3. Install and run
+
+Make sure your terminal is still in the `lego-car` folder, then run:
 
 **macOS / Linux:**
 
@@ -75,8 +83,9 @@ pip install -r requirements.txt
 python -m car.main
 ```
 
-On first run you'll be asked for your **Connection Card** (the code printed on the hub and sensor)
-and a quick gamepad calibration — both saved automatically, never asked again.
+On first run you'll be asked separately for the **Connection Card** details for the Double Motor
+and Color Sensor, followed by a quick gamepad calibration. The results are saved in
+`car/settings.json` and reused later. Calibration runs again if you connect a different gamepad.
 
 <p align="center">
   <a href="instructions/car-card.jpeg"><img src="instructions/car-card.jpeg" width="50%" alt="Holding the Connection Card next to the car"></a>
@@ -99,7 +108,7 @@ Lay matte electrical tape on the floor in four colors:
 | White | Finish line — one lap per crossing |
 | Red | Boundary — stops/redirects the car |
 
-No gaps or overlaps between strips. One white strip only. Lay red boundary as a double-width strip so it's always detected. If a color isn't recognized, adjust the `*_color` value in `car/settings.json`.
+No gaps or overlaps between strips. Lay red boundary as a double-width strip so it's always detected. If a color isn't recognized, adjust the `*_color` value in `car/settings.json`.
 
 <p align="center">
   <a href="instructions/car-track.jpeg"><img src="instructions/car-track.jpeg" width="70%" alt="Top-down view of the full track with colored tape"></a>
@@ -121,8 +130,8 @@ You steer. Crossing the red boundary locks the wheels until you lift the car cle
 | --- | --- |
 | A | Hold to drive forward |
 | B | Hold to drive backward |
-| Left stick | Steer |
-| Trigger | Boost |
+| Configured stick / D-pad / buttons | Steer |
+| Configured trigger / shoulder button | Boost |
 | X | Next mode |
 | Y | Random driver comment |
 | Ctrl+C | Quit |
@@ -133,19 +142,21 @@ You steer. Crossing the red boundary locks the wheels until you lift the car cle
 
 ### Line-Follower
 
-Press X then A. Must see blue or white to start. Follows the tape straight; if the line is
-lost it scans left and right to find it again. Stops after two failed scans and waits.
+Use X to select this mode, then press A. The sensor must see blue or white before the car can start.
+It drives straight while blue, green, or white is detected. If it loses the line, it stops, waits
+briefly, tries a small left/right search, then performs a wider sweep if needed. If the full search
+fails, it stops and waits for manual repositioning.
 
 ### Adventure
 
-Press X then A. Drop the car inside a red-tape border — it drives itself, bouncing off the
-boundary and picking new directions randomly.
+Use X to select this mode, then press A. Place the car inside a red-tape border. It drives by itself,
+redirects at the boundary, and chooses new directions randomly.
 
 Both modes share the same controls:
 
 | Input | Action |
 | --- | --- |
-| A | Start / stop |
+| A | Press once to start, again to stop |
 | X | Next mode |
 | Y | Random driver comment |
 | Ctrl+C | Quit |
@@ -160,17 +171,17 @@ Both modes share the same controls:
 
 | Light | Meaning |
 | --- | --- |
-| Green | Free-drive |
-| Blue | Line-follower running |
-| Yellow | Adventure running |
-| Orange | Boosting |
-| Red, blinking | Blocked / searching / redirecting |
+| Green | Free-Drive mode |
+| Blue | Line-Follower mode selected |
+| Yellow | Adventure mode selected |
+| Orange | Boosting in Free-Drive or Line-Follower |
+| Red, blinking | Boundary blocked / line search / Adventure redirect |
 
 ---
 
 ## Settings & Libraries
 
-All options in `car/settings.json`, created automatically on first run.
+All options are stored in `car/settings.json`. If the file is missing, it is created automatically.
 
 | Library | What it does |
 | --- | --- |
@@ -186,5 +197,5 @@ All options in `car/settings.json`, created automatically on first run.
 pip install -r requirements-dev.txt
 python -m pytest
 ruff check car/ tests/ && ruff format car/ tests/
-pymarkdown --config pyproject.toml scan README.md AGENTS.md
+pymarkdown --config pyproject.toml scan README.md README_DE.md AGENTS.md
 ```
